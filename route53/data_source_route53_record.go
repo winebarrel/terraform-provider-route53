@@ -1,10 +1,12 @@
 package route53
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/route53"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
+	"github.com/aws/aws-sdk-go-v2/service/route53/types"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/resource"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 )
@@ -26,7 +28,7 @@ func dataSourceRoute53Record() *schema.Resource {
 				Required: true,
 			},
 			"ttl": {
-				Type:     schema.TypeString,
+				Type:     schema.TypeInt,
 				Computed: true,
 			},
 			"records": {
@@ -39,7 +41,7 @@ func dataSourceRoute53Record() *schema.Resource {
 }
 
 func dataRoute53RecordRead(d *schema.ResourceData, meta interface{}) error {
-	svc := meta.(*route53.Route53)
+	svc := meta.(*route53.Client)
 	hostedZoneId := d.Get("hosted_zone_id").(string)
 	recordName := d.Get("name").(string)
 	recordType := d.Get("type").(string)
@@ -47,10 +49,11 @@ func dataRoute53RecordRead(d *schema.ResourceData, meta interface{}) error {
 	input := &route53.ListResourceRecordSetsInput{
 		HostedZoneId:    aws.String(hostedZoneId),
 		StartRecordName: aws.String(recordName),
-		StartRecordType: aws.String(recordType),
+		StartRecordType: types.RRType(recordType),
+		MaxItems:        aws.Int32(1),
 	}
 
-	output, err := svc.ListResourceRecordSets(input)
+	output, err := svc.ListResourceRecordSets(context.TODO(), input)
 
 	if err != nil {
 		return err
@@ -67,13 +70,13 @@ func dataRoute53RecordRead(d *schema.ResourceData, meta interface{}) error {
 	records := []string{}
 
 	for _, v := range rrSet.ResourceRecords {
-		records = append(records, *v.Value)
+		records = append(records, aws.ToString(v.Value))
 	}
 
 	d.SetId(resource.UniqueId())
-	d.Set("name", *rrSet.Name)
-	d.Set("type", *rrSet.Type)
-	d.Set("ttl", *rrSet.Type)
+	d.Set("name", aws.ToString(rrSet.Name))
+	d.Set("type", string(rrSet.Type))
+	d.Set("ttl", *rrSet.TTL)
 	d.Set("records", records)
 
 	return nil
