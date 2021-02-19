@@ -1,17 +1,19 @@
 package route53
 
 import (
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/route53"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/route53"
 
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/terraform"
 )
 
 type MySQLConfiguration struct {
-	Route53 *route53.Route53
+	Route53 *route53.Client
 }
 
 func Provider() terraform.ResourceProvider {
@@ -51,22 +53,22 @@ func providerConfigure(d *schema.ResourceData) (interface{}, error) {
 	access_key := d.Get("access_key").(string)
 	secret_key := d.Get("secret_key").(string)
 	region := d.Get("region").(string)
-	config := aws.NewConfig().WithRegion(region)
+	var cfg aws.Config
+	var err error
 
 	if access_key != "" && secret_key != "" {
-		creds := credentials.NewStaticCredentials(access_key, secret_key, "")
-		config = config.WithCredentials(creds)
+		cfg, err = config.LoadDefaultConfig(context.TODO(),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(access_key, secret_key, "")),
+		)
 	} else {
-		config = config.WithCredentialsChainVerboseErrors(true)
+		cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
 	}
-
-	sess, err := session.NewSession()
 
 	if err != nil {
 		return nil, err
 	}
 
-	svc := route53.New(sess, config)
+	svc := route53.NewFromConfig(cfg)
 
 	return svc, nil
 }
